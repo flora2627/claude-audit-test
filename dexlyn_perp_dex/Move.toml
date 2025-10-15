@@ -1,0 +1,13 @@
+[package]
+name = 'dexlyn-perp-trade'
+version = '1.0.0'
+
+[addresses]
+dexlyn_perp = "0xe20ad8ef9e1359af9660da6cc73f5ac092cc2d4e5a5f81101c07e938f33c7893"
+
+
+[dependencies]
+SupraFramework = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/supra-framework" }
+
+#Enable the following line if you want to use the local version of SupraFramework
+#SupraFramework = { local = '../../supra-dev-block/aptos-move/framework/supra-framework' }

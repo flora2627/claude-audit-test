@@ -1,0 +1,18 @@
+[package]
+name = "DexlynCoin"
+version = "1.0.0"
+authors = []
+upgrade_policy = "compatible"
+
+[addresses]
+dexlyn_coin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+dexlyn_coin_owner = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+dexlyn_coin_minter = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+
+
+[dependencies]
+SupraFramework = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/supra-framework" }
+
+#Enable the following line if you want to use the local version of SupraFramework
+#SupraFramework = { local = '../../supra-dev-block/aptos-move/framework/supra-framework' }
+

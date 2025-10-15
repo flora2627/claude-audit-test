@@ -1,0 +1,37 @@
+[package]
+name = 'DexlynTokenomics'
+version = "1.0.0"
+upgrade_policy = "compatible"
+
+[addresses]
+dexlyn_tokenomics = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+owner = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+vesting_admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+emission_admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+voter_admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+voter_governance = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+voter_minter = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+fee_treasury = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+
+voting_escrow_admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+voting_escrow_voter = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+emergency_return = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+
+[dependencies]
+SupraFramework = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/supra-framework" }
+AptosTokenObjects = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/aptos-token-objects" }
+dexlyn_swap = { git = "https://github.com/DexlynLabs/dexlyn_swap.git", rev = "dev" }
+DexlynClmm = { git = "https://github.com/DexlynLabs/dexlyn_swap_v2.git", subdir = "CetusCompile/CetusClmm", rev = "development" }
+DexlynCoin = { local = './dexlyn_coin' }
+dexlyn-perp-trade = { local = './dexlyn_perp_dex' }
+
+#Enable the following line if you want to use the local version of SupraFramework
+#SupraFramework = { local = '../supra-dev-block/aptos-move/framework/supra-framework' }
+#AptosTokenObjects = { local = "../supra-dev-block/aptos-move/framework/aptos-token-objects" }
+#dexlyn_swap = { local = '../dexlyn_swap' }
+#DexlynClmm = { local = '../dexlyn_swap_v2/CetusCompile/CetusClmm' }
+
+
+#[dependencies.SupraMoveUtils]
+#local = '../supra-move-utils'
