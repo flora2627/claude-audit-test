@@ -1856,7 +1856,7 @@ module dexlyn_tokenomics::voter {
         );
 
         if (supplied > 0) {
-            let supply_index = *table::borrow(&voter.supply_index, gauge);
+            let supply_index = *table::borrow_with_default(&voter.supply_index, gauge, &0);
             // get global index0 for accumulated distro
             let index = voter.index;
             // update gauge current position to global position
@@ -1875,10 +1875,10 @@ module dexlyn_tokenomics::voter {
                     let claimable = table::borrow_mut_with_default(&mut voter.claimable, gauge, 0);
                     *claimable = *claimable + share;
                 }
-            } else {
-                // new users are set to the default global state
-                table::upsert(&mut voter.supply_index, gauge, index);
             }
+        } else {
+            // new users are set to the default global state
+            table::upsert(&mut voter.supply_index, gauge, voter.index);
         }
     }
 

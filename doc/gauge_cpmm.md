@@ -633,6 +633,16 @@ Caller is not the distributor of the contract
 
 
 
+<a id="0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_gauge_cpmm_ERROR_NOT_ENOUGH_REWARD"></a>
+
+Not enough reward to transfer
+
+
+<pre><code><b>const</b> <a href="gauge_cpmm.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_gauge_cpmm_ERROR_NOT_ENOUGH_REWARD">ERROR_NOT_ENOUGH_REWARD</a>: u64 = 116;
+</code></pre>
+
+
+
 <a id="0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_gauge_cpmm_ERROR_NOT_IN_EMERGENCY_MODE"></a>
 
 Gauge is not in emergency mode
@@ -928,6 +938,8 @@ Notify the gauge of a new reward amount.
     <a href="gauge_cpmm.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_gauge_cpmm_update_reward">update_reward</a>(gauge, @0x0);
 
     <b>let</b> dxlyn_metadata = address_to_object&lt;Metadata&gt;(gauge.reward_token);
+
+    <b>assert</b>!(<a href="../dexlyn_coin/doc/dxlyn_coin.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_dxlyn_coin_balance_of">dxlyn_coin::balance_of</a>(distribution_addr) &gt;= reward, <a href="gauge_cpmm.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_gauge_cpmm_ERROR_NOT_ENOUGH_REWARD">ERROR_NOT_ENOUGH_REWARD</a>);
 
     //transfer dxlyn <a href="">coin</a> from distribution <b>to</b> gauge
     <a href="_transfer">primary_fungible_store::transfer</a>(distribution, dxlyn_metadata, gauge_address, reward);

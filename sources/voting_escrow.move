@@ -1341,7 +1341,7 @@ module dexlyn_tokenomics::voting_escrow {
         assert!(address_of(voter) == voting_escrow.voter, ERROR_NOT_VOTER);
 
         // Disable transfer of token
-        toggle_transfer(token);
+        toggle_transfer(token, false);
 
         table::upsert(&mut voting_escrow.voted, token, true);
     }
@@ -1358,7 +1358,7 @@ module dexlyn_tokenomics::voting_escrow {
         assert!(address_of(voter) == voting_escrow.voter, ERROR_NOT_VOTER);
 
         // Enable transfer of token
-        toggle_transfer(token);
+        toggle_transfer(token, true);
 
         table::upsert(&mut voting_escrow.voted, token, false);
     }
@@ -1782,15 +1782,15 @@ module dexlyn_tokenomics::voting_escrow {
     /// * `token` - The address of the token to toggle transfer state for.
     fun toggle_transfer(
         token: address,
+        allow_transfer: bool
     ) acquires TokenRef {
         let token_data = borrow_global<TokenRef>(token);
-        let token = object::address_to_object<Token>(token);
 
         // Toggle it based on its current state
-        if (object::ungated_transfer_allowed(token)) {
-            object::disable_ungated_transfer(&token_data.transfer_ref);
-        } else {
+        if (allow_transfer) {
             object::enable_ungated_transfer(&token_data.transfer_ref);
+        } else {
+            object::disable_ungated_transfer(&token_data.transfer_ref);
         }
     }
 

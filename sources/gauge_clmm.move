@@ -100,6 +100,9 @@ module dexlyn_tokenomics::gauge_clmm {
     /// Unauthorized action
     const ERROR_UNAUTHORIZED_USER: u64 = 116;
 
+    /// Not enough reward to transfer
+    const ERROR_NOT_ENOUGH_REWARD: u64 = 117;
+
     // -----------------------------------------------------------------------------
     // -----------------------------------------------------------------------------
     // -----------------------------------------------------------------------------
@@ -565,6 +568,8 @@ module dexlyn_tokenomics::gauge_clmm {
         let current_time = timestamp::now_seconds();
 
         let dxlyn_metadata = address_to_object<Metadata>(gauge.reward_token);
+
+        assert!(dxlyn_coin::balance_of(distribution_addr) >= reward, ERROR_NOT_ENOUGH_REWARD);
 
         //transfer dxlyn coin from distribution to gauge
         primary_fungible_store::transfer(distribution, dxlyn_metadata, gauge_address, reward);

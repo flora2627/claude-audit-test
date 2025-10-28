@@ -3141,7 +3141,7 @@ Set token as voted in gauge.
     <b>assert</b>!(address_of(<a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>) == <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow">voting_escrow</a>.<a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>, <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_ERROR_NOT_VOTER">ERROR_NOT_VOTER</a>);
 
     // Disable transfer of <a href="">token</a>
-    <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_toggle_transfer">toggle_transfer</a>(<a href="">token</a>);
+    <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_toggle_transfer">toggle_transfer</a>(<a href="">token</a>, <b>false</b>);
 
     <a href="_upsert">table::upsert</a>(&<b>mut</b> <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow">voting_escrow</a>.voted, <a href="">token</a>, <b>true</b>);
 }
@@ -3182,7 +3182,7 @@ Set token as abstained for gauge.
     <b>assert</b>!(address_of(<a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>) == <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow">voting_escrow</a>.<a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>, <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_ERROR_NOT_VOTER">ERROR_NOT_VOTER</a>);
 
     // Enable transfer of <a href="">token</a>
-    <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_toggle_transfer">toggle_transfer</a>(<a href="">token</a>);
+    <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_toggle_transfer">toggle_transfer</a>(<a href="">token</a>, <b>true</b>);
 
     <a href="_upsert">table::upsert</a>(&<b>mut</b> <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow">voting_escrow</a>.voted, <a href="">token</a>, <b>false</b>);
 }
@@ -3765,7 +3765,7 @@ Toggle the transfer state of a token.
 * <code><a href="">token</a></code> - The address of the token to toggle transfer state for.
 
 
-<pre><code><b>fun</b> <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_toggle_transfer">toggle_transfer</a>(<a href="">token</a>: <b>address</b>)
+<pre><code><b>fun</b> <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_toggle_transfer">toggle_transfer</a>(<a href="">token</a>: <b>address</b>, allow_transfer: bool)
 </code></pre>
 
 
@@ -3776,15 +3776,15 @@ Toggle the transfer state of a token.
 
 <pre><code><b>fun</b> <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_toggle_transfer">toggle_transfer</a>(
     <a href="">token</a>: <b>address</b>,
+    allow_transfer: bool
 ) <b>acquires</b> <a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_TokenRef">TokenRef</a> {
     <b>let</b> token_data = <b>borrow_global</b>&lt;<a href="voting_escrow.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voting_escrow_TokenRef">TokenRef</a>&gt;(<a href="">token</a>);
-    <b>let</b> <a href="">token</a> = <a href="_address_to_object">object::address_to_object</a>&lt;Token&gt;(<a href="">token</a>);
 
     // Toggle it based on its current state
-    <b>if</b> (<a href="_ungated_transfer_allowed">object::ungated_transfer_allowed</a>(<a href="">token</a>)) {
-        <a href="_disable_ungated_transfer">object::disable_ungated_transfer</a>(&token_data.transfer_ref);
-    } <b>else</b> {
+    <b>if</b> (allow_transfer) {
         <a href="_enable_ungated_transfer">object::enable_ungated_transfer</a>(&token_data.transfer_ref);
+    } <b>else</b> {
+        <a href="_disable_ungated_transfer">object::disable_ungated_transfer</a>(&token_data.transfer_ref);
     }
 }
 </code></pre>

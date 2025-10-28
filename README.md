@@ -2,21 +2,19 @@
 
 ## Overview
 
-This repository contains the smart contracts for the Dexlyn tokenomics system, organized into three main components:
+This repository contains the smart contracts for the Dexlyn tokenomics system, organized into two main components:
 
 ## Dexlyn Coin
 
 - [Dxlyn Coin](./dexlyn_coin/doc/dxlyn_coin.md) - The main utility and governance token of the Dexlyn ecosystem
 
-## VeTokenomics
-
-- [Voting Escrow](./dexlyn_tokenomics/doc/voting_escrow.md) - Manages DXLYN token staking and voting power
-- [Fee Distributor](./dexlyn_tokenomics/doc/fee_distributor.md) - Distributes DXLYN token fee rewards
-- [Base64](./dexlyn_tokenomics/doc/base64.md) - Encodes and decodes base64 strings
-- [I64](./dexlyn_tokenomics/doc/i64.md) - Encodes and decodes 64-bit integers
 
 ## DexlynTokenomics
 
+- [Voting Escrow](./doc/voting_escrow.md) - Manages DXLYN token staking and voting power
+- [Fee Distributor](./doc/fee_distributor.md) - Distributes DXLYN token fee rewards
+- [Base64](./doc/base64.md) - Encodes and decodes base64 strings
+- [I64](./doc/i64.md) - Encodes and decodes 64-bit integers
 - [Voter](./doc/voter.md) - Handles voting and gauge weight management
 - [Bribe](./doc/bribe.md) - Manages bribe distribution for gauges
 - [Emission](./doc/emission.md) - Controls token emission and distribution

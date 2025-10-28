@@ -3945,7 +3945,7 @@ This function track the gauge index to emit the correct DXLYN amount after the d
     );
 
     <b>if</b> (supplied &gt; 0) {
-        <b>let</b> supply_index = *<a href="_borrow">table::borrow</a>(&<a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>.supply_index, gauge);
+        <b>let</b> supply_index = *<a href="_borrow_with_default">table::borrow_with_default</a>(&<a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>.supply_index, gauge, &0);
         // get <b>global</b> index0 for accumulated distro
         <b>let</b> index = <a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>.index;
         // <b>update</b> gauge current position <b>to</b> <b>global</b> position
@@ -3964,10 +3964,10 @@ This function track the gauge index to emit the correct DXLYN amount after the d
                 <b>let</b> claimable = <a href="_borrow_mut_with_default">table::borrow_mut_with_default</a>(&<b>mut</b> <a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>.claimable, gauge, 0);
                 *claimable = *claimable + share;
             }
-        } <b>else</b> {
-            // new users are set <b>to</b> the default <b>global</b> state
-            <a href="_upsert">table::upsert</a>(&<b>mut</b> <a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>.supply_index, gauge, index);
         }
+    } <b>else</b> {
+        // new users are set <b>to</b> the default <b>global</b> state
+        <a href="_upsert">table::upsert</a>(&<b>mut</b> <a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>.supply_index, gauge, <a href="voter.md#0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f_voter">voter</a>.index);
     }
 }
 </code></pre>
