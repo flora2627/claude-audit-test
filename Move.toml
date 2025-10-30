@@ -4,32 +4,32 @@ version = "1.0.0"
 upgrade_policy = "compatible"
 
 [addresses]
-dexlyn_tokenomics = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-owner = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-vesting_admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-emission_admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-voter_admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-voter_governance = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-voter_minter = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-fee_treasury = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+dexlyn_tokenomics = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+owner = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+vesting_admin = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+emission_admin = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+voter_admin = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+voter_governance = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+voter_minter = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+fee_treasury = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
 
-voting_escrow_admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-voting_escrow_voter = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-admin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-emergency_return = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+voting_escrow_admin = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+voting_escrow_voter = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+admin = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+emergency_return = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
 
 [dependencies]
 SupraFramework = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/supra-framework" }
 AptosTokenObjects = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/aptos-token-objects" }
-dexlyn_swap = { git = "https://github.com/DexlynLabs/dexlyn_swap.git", rev = "dev" }
-DexlynClmm = { git = "https://github.com/DexlynLabs/dexlyn_swap_v2.git", subdir = "CetusCompile/CetusClmm", rev = "development" }
+dexlyn_swap = { git = "https://github.com/DexlynLabs/dex_contracts.git", rev = "testnet" }
+DexlynClmm = { git = 'https://github.com/DexlynLabs/CLMM_Dex.git', subdir = 'DexlynClmm', rev = 'master' }
 DexlynCoin = { local = './dexlyn_coin' }
 dexlyn-perp-trade = { local = './dexlyn_perp_dex' }
 
 #Enable the following line if you want to use the local version of SupraFramework
-#SupraFramework = { local = '../supra-dev-block/aptos-move/framework/supra-framework' }
-#AptosTokenObjects = { local = "../supra-dev-block/aptos-move/framework/aptos-token-objects" }
-#dexlyn_swap = { local = '../dexlyn_swap' }
+# SupraFramework = { local = '../aptos-core/aptos-move/framework/supra-framework' }
+# AptosTokenObjects = { local = '../aptos-core/aptos-move/framework/aptos-token-objects' }
+#dexlyn_swap = { local = '../dexlyn_swap' }s
 #DexlynClmm = { local = '../dexlyn_swap_v2/CetusCompile/CetusClmm' }
 
 

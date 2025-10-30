@@ -5,9 +5,9 @@ authors = []
 upgrade_policy = "compatible"
 
 [addresses]
-dexlyn_coin = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-dexlyn_coin_owner = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
-dexlyn_coin_minter = "0xecc6c5425f6328f7e7b9ef17d5b287932c2bb1806058ee99bebef38fb367112f"
+dexlyn_coin = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+dexlyn_coin_owner = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
+dexlyn_coin_minter = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
 
 
 [dependencies]
