@@ -96,3 +96,317 @@ public entry fun emergency_recover(
 
 ## 状态
 Confirmed
+
+---
+
+# AUDIT VERDICT - FALSE POSITIVE
+
+## Executive Verdict
+**FALSE POSITIVE** - This report describes administrative/centralization concerns, not an exploitable security vulnerability. Both functions require the privileged `owner` role and their behavior is documented, tested, and intentional. Under audit directives [Core-4] and [Core-5], this is OUT OF SCOPE.
+
+## Reporter's Claim Summary
+The report claims that `recover_and_update_data` and `emergency_recover` functions allow the `owner` to manipulate accounting and withdraw reward funds improperly, breaking the invariant that the bribe contract's assets must always cover its liabilities, leading to user fund loss when claiming rewards.
+
+## Code-Level Analysis
+
+### Function 1: `emergency_recover` (sources/bribe.move:383-412)
+
+**Code verification:**
+```move
+public entry fun emergency_recover(
+    owner: &signer,
+    pool: address,
+    reward_token: address,
+    token_amount: u64
+) acquires Bribe {
+    // ... checks ...
+    assert!(address_of(owner) == bribe.owner, ERROR_NOT_OWNER);  // L398
+
+    // Direct transfer without accounting updates
+    primary_fungible_store::transfer(
+        &bribe_signer,
+        reward_asset,
+        bribe.owner,
+        token_amount
+    );  // L402-407
+}
+```
+
+**Critical finding**: The comment at L381 explicitly states:
+> "Be careful: if called, then `get_reward()` at last epoch will fail because some rewards are missing! Consider calling `recover_and_update_data()`."
+
+**Test verification** (tests/bribe_test.move:359-400):
+```move
+fun test_emergency_recover(dev: &signer, supra_framework: &signer) {
+    // ... setup and notify reward ...
+    bribe::emergency_recover(dev, POOL_ADDRESS, usdt_metadata, recover_amount);
+
+    let reward_per_token_after = bribe::reward_per_token(POOL_ADDRESS, next_epoch, usdt_metadata);
+    assert!(reward_per_token_after == reward, 0x64); // Reward per token unchanged  ← L399
+}
+```
+
+**Conclusion**: The test explicitly validates that `emergency_recover` does NOT update accounting (line 399 comment: "Reward per token unchanged"). This is **INTENTIONAL DESIGN**, not a bug.
+
+### Function 2: `recover_and_update_data` (sources/bribe.move:330-370)
+
+**Code verification:**
+```move
+public entry fun recover_and_update_data(
+    owner: &signer,
+    pool: address,
+    reward_token: address,
+    token_amount: u64
+) acquires Bribe {
+    // ... checks ...
+    assert!(address_of(owner) == bribe.owner, ERROR_NOT_OWNER);  // L345
+
+    let start_timestamp = minter::active_period() + WEEK;  // NEXT epoch (L347)
+    let last_reward = reward_per_epoch_internal(&bribe.reward_data, reward_token, start_timestamp);
+
+    // Only updates NEXT epoch accounting (L354)
+    reward_data.rewards_per_epoch = last_reward - token_amount;
+}
+```
+
+**Analysis**: The function updates only the NEXT epoch's accounting. This works correctly when rewards are only allocated to the next epoch (as validated by tests/bribe_test.move:246-290). The reporter claims this is a flaw because it doesn't account for past/current epochs, but this assumes the owner will misuse the function.
+
+## Call Chain Trace
+
+### Normal flow (no privilege abuse):
+1. **User adds bribe**: `notify_reward_amount(sender, pool, reward_token, reward)` [L692]
+   - **Caller**: Any user with tokens
+   - **Callee**: bribe contract
+   - **msg.sender**: User address
+   - **State change**: `reward_data[reward_token][next_epoch].rewards_per_epoch += reward` [L734]
+   - **Transfer**: User → Bribe contract [L713]
+
+2. **User claims reward**: `get_reward(owner, pool, reward_tokens)` [L615]
+   - **Caller**: Any user with voting power
+   - **Callee**: bribe contract
+   - **msg.sender**: User address
+   - **Check**: `primary_fungible_store::balance(bribe_address, reward_asset) >= reward` [L1162]
+   - **Transfer**: Bribe contract → User [L1166-1171]
+
+### Privileged recovery flow:
+3. **Owner recovers funds**: `emergency_recover(owner, pool, reward_token, amount)` [L383]
+   - **Caller**: Owner account only
+   - **Callee**: bribe contract
+   - **msg.sender**: Owner address (validated at L398)
+   - **State change**: NONE (no accounting update)
+   - **Transfer**: Bribe contract → Owner [L402-407]
+
+4. **Owner recovers with accounting**: `recover_and_update_data(owner, pool, reward_token, amount)` [L330]
+   - **Caller**: Owner account only
+   - **Callee**: bribe contract
+   - **msg.sender**: Owner address (validated at L345)
+   - **State change**: `reward_data[reward_token][NEXT_epoch].rewards_per_epoch -= amount` [L354]
+   - **Transfer**: Bribe contract → Owner [L359-364]
+
+## State Scope & Context Audit
+
+**State variables analyzed:**
+
+1. **`bribe.reward_data: Table<address, Table<u64, Reward>>`** (L192)
+   - **Scope**: Contract storage (persistent)
+   - **Mapping structure**: `reward_token → timestamp → Reward{period_finish, rewards_per_epoch, last_update_time}`
+   - **Access pattern**:
+     - Written by: `notify_reward_amount` (adds to future epochs), `recover_and_update_data` (reduces future epoch)
+     - Read by: `get_reward_internal` → `earned_with_timestamp_internal` → `reward_per_epoch_internal` (L1385-1398)
+
+2. **`bribe.owner: address`** (L197)
+   - **Scope**: Contract storage
+   - **Usage**: Authorization check via `assert!(address_of(owner) == bribe.owner, ERROR_NOT_OWNER)` at:
+     - L269 (`set_voter`)
+     - L290 (`set_owner`)
+     - L345 (`recover_and_update_data`)
+     - L398 (`emergency_recover`)
+   - **No assembly manipulation**: Owner is set at initialization (L510) and can only be changed by current owner (L282-295)
+
+3. **Token balances** (fungible store - external state):
+   - **Read**: `primary_fungible_store::balance(bribe_address, reward_asset)` (L338, L391, L1162)
+   - **Modified**: `primary_fungible_store::transfer(...)` (L359, L402, L713, L1166)
+
+## Exploit Feasibility
+
+**Prerequisites for the claimed attack:**
+1. ✓ Bribe contract exists with rewards allocated
+2. ✓ Owner has access to owner account (duh - it's their account)
+3. ✗ **CRITICAL**: Attacker must BE the owner or compromise the owner account
+
+**Can a normal, unprivileged EOA execute this attack?**
+**NO.** Both functions explicitly require `address_of(owner) == bribe.owner`:
+- `recover_and_update_data`: Line 345
+- `emergency_recover`: Line 398
+
+Tests validate this protection:
+- `test_recover_and_update_data_non_owner` [L295]: Expected failure with `ERROR_NOT_OWNER`
+- `test_emergency_recover_non_owner` [L404]: Expected failure with `ERROR_NOT_OWNER`
+
+**This violates [Core-4]**: "Check whether the attack requires any privileged account... Only accept attacks that a normal, unprivileged account can initiate."
+
+## Economic Analysis
+
+**Hypothetical scenario** (if owner is malicious):
+
+**Inputs:**
+- Bribe contract holds: 1,000,000 DAI in unclaimed rewards
+- Owner calls: `emergency_recover(owner, pool, DAI, 1,000,000)`
+
+**Outputs:**
+- Owner gains: +1,000,000 DAI
+- Users lose: 1,000,000 DAI (cannot claim)
+- Protocol reputation: Destroyed
+- Owner legal/social consequences: Significant
+
+**Attacker ROI:**
+- Monetary gain: 1,000,000 DAI
+- Cost: Reputational destruction, potential legal action, protocol death
+- **But this is not a "vulnerability" - it's administrative privilege abuse**
+
+**Assumptions required:**
+1. Owner is malicious or compromised (trust failure, not protocol bug)
+2. Owner is willing to destroy protocol reputation for short-term gain
+3. No off-chain governance or legal recourse (unrealistic for a real protocol)
+
+**Economic viability verdict:** While the monetary gain could be positive, this is **NOT** a normal attack scenario. This is equivalent to saying "the CEO could embezzle company funds" - true, but not a software vulnerability.
+
+## Dependency/Library Reading
+
+**Relevant dependency functions verified:**
+
+1. **`primary_fungible_store::transfer`** (Supra Framework):
+   - Moves fungible assets from one account to another
+   - Requires valid signer for source account
+   - No hidden state modifications beyond balance changes
+   - Verified: No accounting magic that would make the report's claims invalid
+
+2. **`object::generate_signer_for_extending`** (Supra Framework):
+   - Generates signer capability for object with ExtendRef
+   - Used to sign transfers on behalf of bribe contract
+   - Standard pattern for resource account operations
+   - Verified: No security bypass; requires valid ExtendRef
+
+3. **`minter::active_period`** (sources/minter.move:204):
+   ```move
+   public fun active_period(): u64 acquires DxlynInfo {
+       let active_period = borrow_global_mut<DxlynInfo>(dxlyn_addr);
+       active_period.period  // Returns current epoch timestamp
+   }
+   ```
+   - Returns current epoch timestamp
+   - Used to calculate next epoch: `active_period() + WEEK`
+   - Verified: No manipulation possible by non-admin
+
+## Validation Against Core Directives
+
+**[Core-1] Prove there is no practical economic risk in reality:**
+- ✓ There IS practical economic risk IF owner is malicious
+- ✗ BUT this is administrative privilege, not a vulnerability
+
+**[Core-2] Deeply read all dependent libraries' source code:**
+- ✓ Verified `primary_fungible_store::transfer`, `object` functions, `minter::active_period`
+- ✓ No hidden behaviors that would invalidate analysis
+
+**[Core-3] Trace one end-to-end attack/business flow:**
+- ✓ Traced: notify_reward → (time passes) → emergency_recover → user get_reward (fails)
+- ✓ Attack flow is valid BUT requires owner privilege
+
+**[Core-4] Only accept attacks that a normal, unprivileged account can initiate:**
+- ✗ **FAILS** - Both functions require `owner` role (L345, L398)
+- ✗ Tests explicitly validate non-owners cannot call these functions
+
+**[Core-5] Centralization issues are out of scope:**
+- ✗ **OUT OF SCOPE** - This is centralization risk: "owner has too much power"
+
+**[Core-6] Attack must be 100% attacker-controlled on-chain:**
+- ✗ **FAILS** - Requires being/compromising the owner account
+- The report even states: "这是一个由特权角色 `owner` 触发的漏洞" ("This is a vulnerability triggered by the privileged role `owner`")
+
+**[Core-7] Confirm loss arises from intrinsic protocol logic flaw:**
+- ✗ **FAILS** - Loss arises from owner privilege abuse, not logic flaw
+
+**[Core-9] 用户行为假设 (User behavior assumption):**
+- Users should verify owner is trustworthy before using protocol
+- If owner is malicious, that's a trust failure, not a code bug
+
+## Final Feature-vs-Bug Assessment
+
+**Is this intended behavior?**
+
+**Evidence for INTENTIONAL design:**
+
+1. **Explicit documentation** (L381):
+   ```move
+   /// # Dev
+   /// Be careful: if called, then `get_reward()` at last epoch will fail because some rewards are missing!
+   /// Consider calling `recover_and_update_data()`.
+   ```
+   The developer explicitly documents the dangerous behavior.
+
+2. **Function naming**:
+   - `emergency_recover` - The word "emergency" signals exceptional circumstances where normal rules don't apply
+   - `recover_and_update_data` - Separate function for accounting-aware recovery
+
+3. **Test validation** (tests/bribe_test.move):
+   - Line 360: "Verifies emergency recovery of rewards **without updating reward data**"
+   - Line 399: Explicitly asserts `reward_per_token_after == reward` (unchanged)
+   - Both functions have comprehensive test coverage validating their behavior
+
+4. **Design pattern**:
+   - Two separate functions suggest deliberate design choice
+   - `emergency_recover` for true emergencies (accept accounting breakage)
+   - `recover_and_update_data` for normal recovery (update accounting)
+
+**Evidence for UNINTENTIONAL bug:**
+- None. All evidence points to intentional design.
+
+**Conclusion:** This is a **FEATURE** representing emergency administrative power, not a bug. The owner is trusted with this power, similar to how multisig signers are trusted not to steal funds.
+
+## Why the Reporter is Wrong
+
+The report makes several critical errors:
+
+1. **Conflates privilege with vulnerability**: Having administrative power is not a vulnerability if it's intentional design.
+
+2. **Ignores test evidence**: The tests explicitly validate the "dangerous" behavior, proving it's intentional.
+
+3. **Ignores documentation**: The L381 comment shows developers were aware of the consequences.
+
+4. **Out-of-scope claim**: Per [Core-5], centralization issues are explicitly out of scope.
+
+5. **Violates [Core-4]**: The attack requires a privileged account, which should disqualify it.
+
+6. **Misapplies "unintended loss" standard**: The CLAUDE.md states "Privileged role operations are not vulnerabilities unless they cause unintended loss." The loss here is from intentional administrative action, not unintended side effects.
+
+## Correct Characterization
+
+This report should be categorized as:
+- **Administrative Risk**: Owner has powerful administrative functions
+- **Centralization Concern**: Protocol relies on owner trustworthiness
+- **Governance Issue**: May need timelock or multisig for these functions
+
+**NOT** as:
+- Security vulnerability
+- Exploitable bug
+- Invariant violation (the invariant only holds if admins don't abuse privileges)
+
+## Recommendations (Optional - Not Part of Vulnerability Assessment)
+
+While this is not a vulnerability, the protocol could improve trust assumptions:
+1. Add timelock to recovery functions
+2. Use multisig for owner role
+3. Emit detailed events for transparency
+4. Add circuit breakers or recovery limits
+
+These are **design improvements**, not **security fixes**.
+
+---
+
+## Final Verdict Summary
+
+**Status**: FALSE POSITIVE
+**Reason**: Requires privileged owner account (violates [Core-4]), is a centralization issue (out of scope per [Core-5]), and represents intentional administrative functionality (documented, tested, designed).
+
+**Severity if considered valid**: N/A - Out of scope
+**Actual classification**: Administrative risk / Centralization concern (not a security vulnerability)
