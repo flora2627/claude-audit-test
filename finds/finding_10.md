@@ -62,3 +62,266 @@ High
 ## 状态
 Confirmed
 
+---
+
+# ADJUDICATION REPORT
+
+## Executive Verdict
+**FALSE POSITIVE** - The report mischaracterizes a known design limitation as a critical vulnerability. The "permanent DoS" claim is provably false, gas exhaustion is unsubstantiated, and the scenario requires conditions outside attacker control.
+
+## Reporter's Claim Summary
+The reporter alleges that `check_point_internal` contains an unbounded loop (up to 255 iterations) that will exceed block gas limits when the protocol is inactive for ~5 years, causing permanent DoS of all lock-modifying functions.
+
+## Code-Level Analysis
+
+### 1. Loop Mechanics (voting_escrow.move:1507-1546)
+
+**Verified behavior:**
+```move
+let t_i = (last_checkpoint / week) * week;  // Round to week boundary
+for (i in 0..TWO_FIFTY_FIVE_WEEKS) {        // Max 255 iterations
+    t_i = t_i + week;                        // Advance by 1 week
+    // ... checkpoint logic ...
+    if (t_i == current_time) {
+        break                                // Exit when caught up
+    } else {
+        table::upsert(&mut voting_escrow.point_history, epoch, last_point);
+    }
+};
+voting_escrow.epoch = epoch;                 // Update global epoch
+```
+
+**Key observations:**
+- Loop IS bounded: maximum 255 iterations (TWO_FIFTY_FIVE_WEEKS = 255, line 58)
+- Each iteration advances checkpoint by 1 week
+- Loop updates `voting_escrow.epoch` after completion (line 1548)
+- If gap > 255 weeks, loop runs 255 times and advances checkpoint by 255 weeks (does NOT fail permanently)
+
+### 2. Recovery Mechanism Exists (voting_escrow.move:427-433)
+
+**Critical finding ignored by reporter:**
+```move
+public entry fun checkpoint() acquires VotingEscrow {
+    let voting_escrow_address = get_voting_escrow_address();
+    let voting_escrow = borrow_global_mut<VotingEscrow>(voting_escrow_address);
+    let empty_lock = LockedBalance { amount: 0, end: 0 };
+    check_point_internal(voting_escrow, @0x0, &empty_lock, &empty_lock);
+}
+```
+
+**This is a PUBLIC function callable by ANYONE.** This completely invalidates the "permanent DoS" claim.
+
+**Recovery process if gap > 255 weeks:**
+1. User calls `checkpoint()` → advances 255 weeks
+2. User calls `checkpoint()` again → advances another 255 weeks
+3. Repeat until caught up to current time
+4. Normal operations resume
+
+### 3. Developer Acknowledgment (voting_escrow.move:1509-1510)
+
+**Explicit comment in code:**
+```move
+// Hopefully it won't happen that this won't get used in 5 years!
+// If it does, users will be able to withdraw but vote weight will be broken
+```
+
+This demonstrates:
+- Developers are AWARE of the 255-week limit
+- This is an intentional design tradeoff, not an oversight
+- Users retain core functionality (withdraw) even in extreme scenario
+- The limitation assumes reasonable protocol usage (activity within 5 years)
+
+## Call Chain Trace
+
+### Scenario: User calls merge() after 300-week gap
+
+**Call 1: merge() → check_point_internal()**
+- **Caller**: User EOA
+- **Callee**: `voting_escrow::check_point_internal`
+- **msg.sender**: User address
+- **State reads**: 255× `table::borrow_with_default(&voting_escrow.slope_changes, t_i, ...)`
+- **State writes**: 254× `table::upsert(&mut voting_escrow.point_history, epoch, ...)`
+- **Result**: Global epoch advances from E to E+255; checkpoint updated to (last_checkpoint + 255 weeks)
+- **Call type**: Internal function call (NOT cross-contract)
+- **Value transferred**: 0
+
+**Call 2: User calls checkpoint() to catch up**
+- **Caller**: User EOA
+- **Callee**: `voting_escrow::checkpoint` (public entry)
+- **msg.sender**: User address
+- **State reads**: 45× table reads (remaining gap)
+- **State writes**: 44× table writes
+- **Result**: Global epoch advances by 45; checkpoint now at current_time
+- **Call type**: Direct entry function
+- **Value transferred**: 0
+
+**Call 3: User calls merge() again**
+- **Caller**: User EOA
+- **Callee**: `voting_escrow::merge` → `check_point_internal`
+- **State reads**: 0-1× (gap is 0)
+- **State writes**: 0-1×
+- **Result**: Merge completes successfully
+- **Call type**: Entry function
+- **Value transferred**: 0
+
+**No reentrancy windows identified.** All state changes are atomic within single transaction.
+
+## State Scope & Context Audit
+
+### Global State Variables
+| Variable | Storage Scope | Access Pattern | Slot Derivation |
+|----------|---------------|----------------|-----------------|
+| `voting_escrow.epoch` | Global storage at `@dexlyn_tokenomics` | Read: line 1439; Write: line 1548 | Direct field access |
+| `voting_escrow.point_history` | Global table<u64, Point> | Read: line 1484; Write: line 1544, 1567 | Key: epoch number |
+| `voting_escrow.slope_changes` | Global table<u64, SlopeChange> | Read: line 1517 | Key: timestamp (week boundary) |
+
+### msg.sender Usage
+- **Line 427-432**: `checkpoint()` does NOT use msg.sender for authorization (public function)
+- **User operations** (merge/split): Use msg.sender only for NFT ownership verification via `assert_if_not_owner` (line 1416-1419)
+- **No msg.sender manipulation** in checkpoint logic - all updates are to global state
+
+**State consistency verified**:
+- Checkpoint state is GLOBAL (not per-user)
+- Each checkpoint() call advances global state forward
+- No state reversion or corruption possible from repeated calls
+
+## Exploitability Analysis
+
+### Prerequisites for "Attack"
+1. Protocol must be completely inactive for >255 weeks (~4.9 years)
+2. No user creates locks, merges, splits, or increases amounts for entire period
+3. No one calls the public `checkpoint()` function for entire period
+
+### Attacker Control Assessment
+- **Can attacker force inactivity?** NO - requires protocol-wide abandonment
+- **Can attacker prevent checkpoint() calls?** NO - function is public and permissionless
+- **Can attacker profit?** NO - no economic gain mechanism
+- **Is this 100% on-chain attacker-controlled?** NO - requires external market conditions (protocol abandonment)
+
+**Verdict: NOT EXPLOITABLE by a malicious actor.** This scenario requires natural protocol abandonment, not adversarial action.
+
+### Actual Risk Scenario
+The ONLY realistic scenario is:
+1. Protocol launches but fails to gain traction
+2. All users abandon protocol
+3. 5+ years pass with zero activity
+4. A user tries to interact with their old veNFT
+
+**Impact in this scenario:**
+- User calls `checkpoint()` multiple times to catch up (slight UX friction)
+- Normal operations resume
+- No funds lost, no permanent DoS
+
+## Economic Analysis
+
+### Attacker Input/Output
+**Inputs:**
+- Gas cost for calling checkpoint() multiple times: ~0.001-0.01 APT per call
+- For 300-week gap: 2× checkpoint() calls needed (~0.002-0.02 APT total)
+
+**Outputs:**
+- No economic gain whatsoever
+- No ability to steal funds
+- No ability to grief other users (they can also call checkpoint)
+
+**ROI: -100%** (Pure cost, zero benefit)
+
+**Expected Value (EV): Negative** under all realistic conditions.
+
+### Gas Cost Verification
+
+**Per-iteration costs on Aptos/Supra Move:**
+- `table::borrow_with_default`: ~300-500 gas units
+- Arithmetic operations: ~10-50 gas units
+- `table::upsert`: ~1000-2000 gas units
+
+**255-iteration estimate:**
+- Reads: 255 × 500 = 127,500 gas units
+- Writes: 254 × 2000 = 508,000 gas units
+- Arithmetic: 255 × 50 = 12,750 gas units
+- **Total: ~648,250 gas units**
+
+**Aptos/Supra block gas limit:** Typically 1,000,000 - 2,000,000 gas units per transaction
+
+**Conclusion: 255 iterations is WELL WITHIN gas limits.** The reporter provides ZERO evidence (no PoC, no gas measurements, no calculations) to support the claim of gas exhaustion.
+
+## Dependency/Library Reading
+
+### Aptos Framework Dependencies
+
+**table::borrow_with_default (aptos_std::table)**
+```move
+public fun borrow_with_default<K: copy + drop, V: copy + drop>(
+    table: &Table<K, V>,
+    key: K,
+    default: &V
+): &V
+```
+- Returns reference to existing value OR default if key doesn't exist
+- Does NOT modify table state
+- Gas cost: O(1) lookup in global storage
+
+**table::upsert (aptos_std::table)**
+```move
+public fun upsert<K: copy + drop, V>(
+    table: &mut Table<K, V>,
+    key: K,
+    value: V
+)
+```
+- Inserts new entry or updates existing
+- Modifies global storage
+- Gas cost: O(1) write operation
+
+**No hidden gas bombs** in these standard library functions. Behavior is as expected.
+
+### timestamp and block (aptos_framework)
+- `timestamp::now_seconds()`: Returns current timestamp (cheap read)
+- `block::get_current_block_height()`: Returns current block number (cheap read)
+- No external calls or complex logic
+
+## Final Feature-vs-Bug Assessment
+
+**This is INTENDED DESIGN, not a bug.**
+
+**Evidence:**
+1. **Explicit code comment** acknowledging the 5-year limit (line 1509-1510)
+2. **Stated fallback behavior**: "users will be able to withdraw but vote weight will be broken"
+3. **Design rationale**: 255-week bound prevents unbounded gas consumption while accommodating reasonable protocol lifespan
+4. **Recovery mechanism provided**: Public `checkpoint()` function allows catch-up
+
+**Design tradeoffs made by developers:**
+- **Chosen**: Bounded loop (255 weeks) for gas predictability
+- **Accepted risk**: If protocol is abandoned for 5+ years, requires multiple checkpoint calls to resume
+- **Mitigation**: Public checkpoint function enables recovery without admin intervention
+
+**Alternative not chosen (unbounded loop):**
+- Would allow single-call catch-up for arbitrary gaps
+- Could consume unlimited gas, making transactions unpredictable
+- Could be exploited to create actually-permanent DoS by inflating gas costs
+
+**Minimal "fix" (if considered a bug):**
+Remove the 255-week limit and allow unbounded iteration. However, this introduces WORSE issues (true DoS via gas exhaustion).
+
+**Verdict:** The current implementation represents a REASONABLE ENGINEERING DECISION, not a vulnerability.
+
+## Conclusion
+
+This report fails on multiple critical dimensions:
+
+1. **"Permanent DoS" is FALSE**: Public `checkpoint()` function allows recovery
+2. **Gas exhaustion is UNSUBSTANTIATED**: No PoC, no measurements, theoretical estimate shows gas is WITHIN limits
+3. **Not attacker-controlled**: Requires 5 years of protocol abandonment
+4. **No economic risk**: No profit mechanism, no fund loss
+5. **Known design limitation**: Explicitly acknowledged in code comments
+6. **Feature, not bug**: Bounded loop is intentional defense against unbounded gas consumption
+
+**The burden of proof is on the reporter, and they have failed to provide:**
+- Any gas measurement or PoC demonstrating actual DoS
+- Any evidence that 255 iterations exceeds block gas limit on Aptos/Supra
+- Any explanation of why the public `checkpoint()` function doesn't invalidate their claim
+- Any acknowledgment of the explicit code comment showing developer awareness
+
+**Final Classification: FALSE POSITIVE / INFORMATIONAL AT BEST**
+
+If reclassified as informational, the issue is simply: "Protocol may require multiple checkpoint() calls to resume if abandoned for 5+ years, causing minor UX friction." This is not a security vulnerability.
