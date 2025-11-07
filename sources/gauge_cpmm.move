@@ -783,9 +783,9 @@ module dexlyn_tokenomics::gauge_cpmm {
     // -----------------------------------------------------------------------------
     // -----------------------------------------------------------------------------
     inline fun get_gauge_address_from_coin<X, Y, Curve>(): address {
-        let option_pool_address = liquidity_pool::get_pool<X, Y, Curve>();
-        assert!(option::is_some(&option_pool_address), ERROR_INVALID_POOL_TYPES);
-        get_gauge_address(*option::borrow(&option_pool_address))
+        assert!(liquidity_pool::is_pool_exists<X, Y, Curve>(), ERROR_INVALID_POOL_TYPES);
+        let pool_address = liquidity_pool::generate_lp_object_address<X, Y, Curve>();
+        get_gauge_address(pool_address)
     }
 
 

@@ -1,0 +1,13 @@
+dexlyn_coin/sources/dxlyn_coin.move
+sources/bribe.move
+sources/emission.move
+sources/fee_distributor.move
+sources/gauge_clmm.move
+sources/gauge_cpmm.move
+sources/gauge_perp.move
+sources/libraries/base64.move
+sources/libraries/i64.move
+sources/minter.move
+sources/vesting.move
+sources/voter.move
+sources/voting_escrow.move

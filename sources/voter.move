@@ -537,10 +537,8 @@ module dexlyn_tokenomics::voter {
         governance: &signer
     ) acquires Voter {
         // Validate the pool exist
-        let option_pool = liquidity_pool::get_pool<X, Y, Curve>();
-        assert!(option::is_some(&option_pool), ERROR_POOL_NOT_EXISTS);
-
-        let pool = *option::borrow(&option_pool);
+        assert!(liquidity_pool::is_pool_exists<X, Y, Curve>(), ERROR_POOL_NOT_EXISTS);
+        let pool = liquidity_pool::generate_lp_object_address<X, Y, Curve>();
 
         let voter_address = get_voter_address();
         let voter = borrow_global_mut<Voter>(voter_address);

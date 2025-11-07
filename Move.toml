@@ -19,9 +19,14 @@ admin = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
 emergency_return = "0x3e12a0ec8c197d2adf43dcb9ebd3b25777e79b2e6fa8e8c9fbe38a8cdfee041c"
 
 [dependencies]
-SupraFramework = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/supra-framework" }
-AptosTokenObjects = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/aptos-token-objects" }
-dexlyn_swap = { git = "https://github.com/DexlynLabs/dex_contracts.git", rev = "testnet" }
+# Git version (disabled for testing)
+# SupraFramework = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/supra-framework" }
+# AptosTokenObjects = { git = "https://github.com/Entropy-Foundation/aptos-core.git", rev = "dev", subdir = "aptos-move/framework/aptos-token-objects" }
+
+# Local version with test support (enabled)
+SupraFramework = { local = '../aptos-core/aptos-move/framework/supra-framework' }
+AptosTokenObjects = { local = '../aptos-core/aptos-move/framework/aptos-token-objects' }
+dexlyn_swap = { local = "/Users/huang/Documents/web3-audit/2025/hai/dex_contracts" }
 DexlynClmm = { git = 'https://github.com/DexlynLabs/CLMM_Dex.git', subdir = 'DexlynClmm', rev = 'master' }
 DexlynCoin = { local = './dexlyn_coin' }
 dexlyn-perp-trade = { local = './dexlyn_perp_dex' }
