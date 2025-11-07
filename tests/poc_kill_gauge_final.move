@@ -59,17 +59,8 @@ module dexlyn_tokenomics::poc_kill_gauge_final
         liquidity_pool::generate_lp_object_address<X, Y, Uncorrelated>()
     }
 
-    /// POC: Demonstrates kill_gauge causes permanent DXLYN lockup in voter contract
-    ///
-    /// Vulnerability scenario:
-    /// 1. Two gauges (BTC-USDT and USDC-USDT) each with 50% voting weight
-    /// 2. Emission is sent to voter contract via update_period (voter balance increases)
-    /// 3. Governance kills BTC-USDT gauge BEFORE distribute
-    /// 4. When distribute is called, only alive gauge (USDC-USDT) accumulates claimable
-    /// 5. Result: voter balance = 100%, but claimable = 50% (only alive gauge)
-    /// 6. The 50% allocated to killed gauge is permanently locked in voter contract
-    ///
-    /// This breaks the core accounting invariant: voter_balance == sum(claimable)
+    // POC: Demonstrates kill_gauge causes permanent DXLYN lockup in voter contract
+    // When a gauge is killed before distribute, its allocated emission is permanently locked
     #[test(dev = @dexlyn_tokenomics)]
     fun test_poc_kill_gauge_causes_permanent_lockup(dev: &signer) {
         // ========== SETUP ==========
@@ -179,12 +170,8 @@ module dexlyn_tokenomics::poc_kill_gauge_final
         // (This is proven by code inspection - there's no treasury withdrawal or recovery mechanism)
     }
 
-    /// POC: Demonstrates accumulation of locked funds across multiple kill_gauge operations
-    ///
-    /// This test shows that the issue compounds over time:
-    /// - Each kill_gauge operation locks additional DXLYN
-    /// - Multiple gauges can be killed, each locking their pending emissions
-    /// - The locked funds accumulate and can reach significant amounts
+    // POC: Demonstrates accumulation of locked funds across multiple kill_gauge operations
+    // The issue compounds over time as each kill_gauge locks additional DXLYN
     #[test(dev = @dexlyn_tokenomics)]
     fun test_poc_multiple_kills_accumulate_locked_funds(dev: &signer) {
         setup_test_with_genesis(dev);
