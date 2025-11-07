@@ -2720,4 +2720,169 @@ module dexlyn_tokenomics::voting_escrow_test {
         voting_escrow::abstain(alice, alice_address);
     }
     // abstain test cases end
+
+    // -------------------------------------------------------------------------
+    // FINDING #8: Integer Truncation in Split - Proof of Concept Tests
+    // -------------------------------------------------------------------------
+
+    /// PoC Test 1: Demonstrates partial loss - splitting odd number of base units
+    /// Expected: User locks amount that cannot divide evenly, loses 1 base unit due to truncation
+    /// Calculation: floor(500000001*1/2) + floor(500000001*1/2) = 250000000 + 250000000 = 500000000, loss = 1
+    #[test(dev = @dexlyn_tokenomics, supra_framework = @supra_framework, alice = @0x123)]
+    fun test_split_integer_truncation_loss_5_tokens(
+        dev: &signer, supra_framework: &signer, alice: &signer
+    ) {
+        setup_test_with_genesis(dev, supra_framework);
+        let alice_address = address_of(alice);
+
+        // Lock 5 DXLYN + 1 base unit (cannot divide evenly by 2)
+        let value = 5 * DXLYN_DECIMAL + 1;
+        dxlyn_coin::register_and_mint(dev, alice_address, value);
+        let unlock_time = timestamp::now_seconds() + WEEK;
+        voting_escrow::create_lock(alice, value, unlock_time);
+
+        // Verify initial state
+        let (_, supply_before, _, _, coins_value_before, _) = voting_escrow::get_voting_escrow_state();
+        assert!(supply_before == value, 0x1);
+        assert!(coins_value_before == value, 0x2);
+
+        // Split with equal weights [1, 1]
+        let (from_token_address, _) = get_nft_token_address(1);
+        let split_weights: vector<u64> = vector[1, 1];
+        voting_escrow::split(alice, split_weights, from_token_address);
+
+        // Get the two new NFT tokens
+        let (second_token_address, _) = get_nft_token_address(2);
+        let (third_token_address, _) = get_nft_token_address(3);
+
+        // Check locked amounts
+        let (second_lock_amount, _) = voting_escrow::get_token_lock(second_token_address);
+        let (third_lock_amount, _) = voting_escrow::get_token_lock(third_token_address);
+
+        // Each should get floor((5*10^8 + 1) * 1 / 2) = floor(250000000.5) = 250000000
+        assert!(second_lock_amount == 250000000, 0x3);
+        assert!(third_lock_amount == 250000000, 0x4);
+
+        // Critical assertion: supply should be 500000001, but is actually 500000000
+        let (_, supply_after, _, _, coins_value_after, _) = voting_escrow::get_voting_escrow_state();
+        let total_locked = second_lock_amount + third_lock_amount;
+
+        // BUG DEMONSTRATION: Total locked < Original value
+        // 1 base unit is permanently lost!
+        assert!(total_locked == 500000000, 0x5); // Only 500000000 returned
+        assert!(supply_after == 500000000, 0x6); // Supply is 500000000, not 500000001!
+        assert!(coins_value_after == value, 0x7); // But contract still holds 500000001
+
+        // The invariant is broken: supply (500000000) != coins_value (500000001)
+        // 1 base unit is stuck in the contract forever
+        assert!(supply_after != coins_value_after, 0x8);
+        assert!(coins_value_after - supply_after == 1, 0x9); // Lost 1 base unit
+    }
+
+    /// PoC Test 2: Demonstrates total loss - splitting 1 base unit with equal weights [1,1]
+    /// Expected: User locks 1 base unit, splits into 2 NFTs, but ENTIRE amount is lost
+    /// Calculation: floor(1*1/2) + floor(1*1/2) = 0 + 0 = 0, loss = 1 (100% loss!)
+    #[test(dev = @dexlyn_tokenomics, supra_framework = @supra_framework, alice = @0x123)]
+    fun test_split_integer_truncation_total_loss(
+        dev: &signer, supra_framework: &signer, alice: &signer
+    ) {
+        setup_test_with_genesis(dev, supra_framework);
+        let alice_address = address_of(alice);
+
+        // Lock exactly 1 base unit (smallest possible amount)
+        let value = 1;
+        dxlyn_coin::register_and_mint(dev, alice_address, value);
+        let unlock_time = timestamp::now_seconds() + WEEK;
+        voting_escrow::create_lock(alice, value, unlock_time);
+
+        // Verify initial state
+        let (_, supply_before, _, _, coins_value_before, _) = voting_escrow::get_voting_escrow_state();
+        assert!(supply_before == value, 0x1);
+        assert!(coins_value_before == value, 0x2);
+
+        // Split with equal weights [1, 1]
+        let (from_token_address, _) = get_nft_token_address(1);
+        let split_weights: vector<u64> = vector[1, 1];
+        voting_escrow::split(alice, split_weights, from_token_address);
+
+        // Get the two new NFT tokens
+        let (second_token_address, _) = get_nft_token_address(2);
+        let (third_token_address, _) = get_nft_token_address(3);
+
+        // Check locked amounts: each should be floor(1*1/2) = 0
+        let (second_lock_amount, _) = voting_escrow::get_token_lock(second_token_address);
+        let (third_lock_amount, _) = voting_escrow::get_token_lock(third_token_address);
+
+        // CATASTROPHIC BUG: Both NFTs have 0 locked amount!
+        assert!(second_lock_amount == 0, 0x3);
+        assert!(third_lock_amount == 0, 0x4);
+
+        // Critical assertion: supply is now 0, but contract still holds 1 base unit
+        let (_, supply_after, _, _, coins_value_after, _) = voting_escrow::get_voting_escrow_state();
+        let total_locked = second_lock_amount + third_lock_amount;
+
+        // BUG DEMONSTRATION: 100% loss!
+        assert!(total_locked == 0, 0x5); // Nothing returned!
+        assert!(supply_after == 0, 0x6); // Supply is 0!
+        assert!(coins_value_after == value, 0x7); // But contract still holds 1 base unit
+
+        // The entire 1 base unit is permanently stuck in the contract
+        // User cannot withdraw from either NFT since both have 0 locked amount
+        assert!(supply_after == 0, 0x8);
+        assert!(coins_value_after == 1, 0x9);
+    }
+
+    /// PoC Test 3: Demonstrates uneven split causing loss with realistic amounts
+    /// Splitting 10 base units with weights [3,3,3] where sum=9
+    /// Calculation: floor(10*3/9) + floor(10*3/9) + floor(10*3/9) = 3 + 3 + 3 = 9, loss = 1
+    #[test(dev = @dexlyn_tokenomics, supra_framework = @supra_framework, alice = @0x123)]
+    fun test_split_integer_truncation_uneven_weights(
+        dev: &signer, supra_framework: &signer, alice: &signer
+    ) {
+        setup_test_with_genesis(dev, supra_framework);
+        let alice_address = address_of(alice);
+
+        // Lock exactly 10 base units
+        let value = 10;
+        dxlyn_coin::register_and_mint(dev, alice_address, value);
+        let unlock_time = timestamp::now_seconds() + WEEK;
+        voting_escrow::create_lock(alice, value, unlock_time);
+
+        // Verify initial state
+        let (_, supply_before, _, _, coins_value_before, _) = voting_escrow::get_voting_escrow_state();
+        assert!(supply_before == value, 0x1);
+        assert!(coins_value_before == value, 0x2);
+
+        // Split with weights [3, 3, 3] (total weight = 9)
+        let (from_token_address, _) = get_nft_token_address(1);
+        let split_weights: vector<u64> = vector[3, 3, 3];
+        voting_escrow::split(alice, split_weights, from_token_address);
+
+        // Get the three new NFT tokens
+        let (second_token_address, _) = get_nft_token_address(2);
+        let (third_token_address, _) = get_nft_token_address(3);
+        let (fourth_token_address, _) = get_nft_token_address(4);
+
+        // Check locked amounts: each should be floor(10*3/9) = floor(3.333...) = 3
+        let (second_lock_amount, _) = voting_escrow::get_token_lock(second_token_address);
+        let (third_lock_amount, _) = voting_escrow::get_token_lock(third_token_address);
+        let (fourth_lock_amount, _) = voting_escrow::get_token_lock(fourth_token_address);
+
+        // Each NFT gets 3 base units
+        assert!(second_lock_amount == 3, 0x3);
+        assert!(third_lock_amount == 3, 0x4);
+        assert!(fourth_lock_amount == 3, 0x5);
+
+        // BUG: Total locked = 9, but original was 10
+        let (_, supply_after, _, _, coins_value_after, _) = voting_escrow::get_voting_escrow_state();
+        let total_locked = second_lock_amount + third_lock_amount + fourth_lock_amount;
+
+        assert!(total_locked == 9, 0x6); // Only 9 returned
+        assert!(supply_after == 9, 0x7); // Supply is 9, not 10!
+        assert!(coins_value_after == value, 0x8); // Contract still holds 10
+
+        // Lost 1 base unit due to truncation
+        assert!(coins_value_after - supply_after == 1, 0x9);
+    }
+    // Finding #8 PoC tests end
 }
