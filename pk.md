@@ -4,6 +4,121 @@
 
 ---
 
+## 🔄 Recent False Positive Analysis (2025-11-07)
+
+### Finding 10 - "Unbounded Loop DoS"
+🔁 **False Positive Reflection:**
+- **Wrong prior:** "255 iterations in a loop = must cause gas exhaustion and DoS"
+- **Why it failed:** Made severity claim without quantitative gas analysis; missed public recovery function `checkpoint()`; characterized developer-acknowledged design limitation as critical vulnerability
+
+🧠 **Prior Knowledge Update:**
+- **Rule 17:** Gas DoS claims REQUIRE actual gas calculations, not iteration count heuristics
+  - Example: 255 iterations × (reads + writes + arithmetic) = 648K gas vs 1-2M block limit = NO DoS
+- **Rule 18:** Before claiming "permanent DoS", check for recovery mechanisms (public/permissionless functions)
+- **Rule 19:** Developer comments acknowledging limitations + fallback behavior = intentional design tradeoff, NOT vulnerability
+
+📍 **Checkpoint for Future:**
+- When seeing loop limits: Calculate actual gas → Check for recovery functions → Verify if limitation acknowledged in comments → Classify as design choice vs bug
+
+---
+
+### Finding 11 - "CLMM Liquidity Manipulation"
+🔁 **False Positive Reflection:**
+- **Wrong prior:** "Out-of-range CLMM position = liquidity becomes 0"
+- **Why it failed:** Confused **stored liquidity value** (constant in position struct) with **active fee-earning liquidity** (dynamic based on price); missed critical assertion `assert!(liquidity > 0)`
+
+🧠 **Prior Knowledge Update:**
+- **Rule 20:** CLMM Position Mechanics Distinction
+  - **Stored liquidity:** Position struct field, constant until explicit modification (decrease_liquidity)
+  - **Active liquidity:** Whether position earns fees, changes when price moves in/out of range
+  - `get_liquidity()` reads stored value, NOT active status
+- **Rule 21:** NEVER skip over assertions - they are on-chain guards that invalidate entire attack paths
+- **Rule 22:** When claiming "user can modify X while deposited", verify NFT ownership transfer
+
+📍 **Checkpoint for Future:**
+- For CLMM/AMM issues: Distinguish stored values vs computed values → Check what function actually reads → Verify all assertions in code path → Consider ownership model
+
+---
+
+### Finding 12 - "Binary Search Inconsistency"
+🔁 **False Positive Reflection:**
+- **Wrong prior:** "Similar but slightly different code = inconsistency vulnerability"; "Non-atomic updates = exploitable race condition"
+- **Why it failed:** Both functions actually use identical formula `(min+max+2)/2`; didn't trace temporal selection logic (`ts ≤ target_week`); non-atomicity irrelevant when both paths use same temporal criterion
+
+🧠 **Prior Knowledge Update:**
+- **Rule 23:** Temporal Selection Systems (snapshots, epochs, checkpoints)
+  - Non-atomic updates OK if all code paths select data by same temporal criterion
+  - Example: `balance_of` and `ve_supply` both use "largest epoch with ts ≤ week_start"
+  - Verify WHEN data is selected, not just THAT it's selected
+- **Rule 24:** Binary search "inconsistency" requires proof that different inputs → divergent outputs for SAME query
+
+📍 **Checkpoint for Future:**
+- For snapshot/epoch systems: Map all data reads → Identify temporal selection criterion for each → Verify criterion is consistent → Test if mid-period updates can cause divergence
+
+---
+
+### Finding 13 - "Ghost Weight in Epoch Accounting"
+🔁 **False Positive Reflection:**
+- **Wrong prior:** "Accounting discrepancy = exploitable vulnerability"; "Inflated denominator = ongoing impact"
+- **Why it failed:** Historical epoch data is immutable after use; rewards use PREVIOUS epoch (frozen snapshot); `is_alive` check has explicit comment explaining intentional double-subtraction prevention
+
+🧠 **Prior Knowledge Update:**
+- **Rule 25:** Immutable Historical Data Pattern
+  - Distinguish operational state (affects current/future ops) vs archival state (historical record)
+  - If discrepancy is in historical epoch never consulted again → cosmetic only, no impact
+  - Example: `total_weights_per_epoch[E0]` used once at E0→E1 transition, then frozen
+- **Rule 26:** Epoch-Based Accounting
+  - Check: Does "inflated past value" affect future calculations? If NO → not a vulnerability
+  - Rewards typically use snapshot from PREVIOUS epoch (immutable when accessed)
+- **Rule 27:** Explicit Code Comments on Behavior
+  - Comment saying "don't subtract because already done in kill_gauge()" = INTENTIONAL design
+  - Don't report as bug when code explicitly explains the logic
+
+📍 **Checkpoint for Future:**
+- For epoch/accounting issues: Identify if state is historical vs operational → Trace if past discrepancy affects future ops → Check code comments for intentionality → Classify impact
+
+---
+
+### Finding 15 - "Double Division Precision Loss"
+🔁 **False Positive Reflection:**
+- **Wrong prior:** "Any precision loss = vulnerability"; "Dust accumulation = permanent freeze"; "Loop iteration limit = DoS"
+- **Why it failed:** Standard integer arithmetic limitation (<0.01% in realistic scenarios); recovery functions exist (`recover_and_update_data`, `emergency_recover`); 50-week limit with checkpoint advancement = pagination, not freeze; explicitly acknowledged in code comments
+
+🧠 **Prior Knowledge Update:**
+- **Rule 28:** Precision Loss Severity Assessment
+  - Calculate actual magnitude: typical case vs worst case
+  - Example: (reward × MULTIPLIER) / total_supply → second division → cumulative loss < 0.01% = negligible
+  - Check for dust recovery mechanisms (admin sweep, emergency withdraw)
+  - If loss < 0.1% AND recoverable → informational, not vulnerability
+- **Rule 29:** Loop Limits vs DoS
+  - Loop limit WITH checkpoint/pagination = multi-transaction access (feature)
+  - Loop limit WITHOUT progress saving = hard cap (potential issue)
+  - Check: Does state update allow resumption? Example: `user_last_time` advances each claim
+- **Rule 30:** Intentional Design Tradeoffs
+  - Code comments saying "calculation may lose precision in some case" = acknowledged
+  - Gas optimization vs precision = common DeFi pattern (e.g., Synthetix StakingRewards)
+  - Don't report as vulnerability when explicitly documented as design choice
+
+📍 **Checkpoint for Future:**
+- For precision issues: Calculate actual loss percentage → Check recovery mechanisms → Verify if acknowledged in comments → Assess if standard DeFi pattern → Classify severity
+
+---
+
+## ⚠️ Common False Positive Patterns - Pre-Submission Checklist
+
+Before submitting Medium+ findings, verify you haven't fallen into these traps:
+
+- [ ] **Assertion Blindness** - Did you skip over `assert!()` statements that invalidate the attack?
+- [ ] **Storage vs Computed Confusion** - Are you confusing stored values with dynamically computed values?
+- [ ] **No Quantitative Analysis** - Are you claiming gas/economic impact without actual calculations?
+- [ ] **Ignored Explicit Comments** - Does code comment explicitly explain the behavior you're reporting?
+- [ ] **Historical vs Operational State** - Is the "discrepancy" in frozen historical data never used again?
+- [ ] **Missed Recovery Mechanisms** - Did you check for admin/public recovery functions?
+- [ ] **Feature vs Bug** - Is this an intentional design tradeoff documented in code/comments?
+- [ ] **Temporal Selection Logic** - For snapshot systems, did you trace WHEN data is selected, not just WHAT?
+
+---
+
 ## I. 核心审计目标与分层
 
 - 仅在满足 **资金损失 / 资产冻结 / 协议级 DoS / 欺诈性会计失衡** 时输出 Finding。  
