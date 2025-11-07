@@ -1,0 +1,98 @@
+## 标题
+`bribe::recover_and_update_data` 函数存在会计操纵漏洞，允许 owner 不当提取奖励资金 🚨
+
+## 分类
+Loss – Mis-measurement / Access Control
+
+## 位置
+- `sources/bribe.move`: `recover_and_update_data` 函数 (L330-L370)
+
+## 二级指标与影响
+- **二级指标**: `bribe.reward_data: Table<address, Table<u64, Reward>>`，此为 `bribe` 合约的负债表，记录了每个 epoch 应分发的奖励总额 (`rewards_per_epoch`)。
+- **核心断言**: `S-L1 (过度可提取)` / `Invariant-Broken`。`bribe` 合约的资产（持有的某种 `reward_token` 余额）必须始终足以支付其负债（所有 `rewards_per_epoch` 的总和）。该函数允许 `owner` 破坏此不变量。
+- **影响门槛**: `Loss`。`owner` 可以通过此函数提取超过协议预期的资金，导致合约资产不足，使得诚实用户在之后调用 `get_reward` 时因断言 `ERROR_INSUFFICIENT_REWARD_TOKEN_BALANCE` (L1161) 失败而无法领取他们应得的奖励。
+
+## 详细说明
+
+### 触发条件 / 调用栈
+1.  一个 `bribe` 合约已经通过 `notify_reward_amount` 接收了某种 `reward_token` 的奖励。
+2.  `bribe` 合约的 `owner` 调用 `recover_and_update_data` 函数，并提供一个 `token_amount` 参数。
+
+### 缺陷分析
+`bribe` 模块提供了两个特权函数 (`recover_and_update_data` 和 `emergency_recover`)，它们都允许 `owner` 提取资金，但二者均存在严重的设计缺陷，使得 `owner` 可以破坏协议的会计平衡并导致用户资金损失。
+
+#### 1. `recover_and_update_data` (L330) - 会计操纵
+`recover_and_update_data` 函数的设计意图是允许 `owner` 在纠正错误或紧急情况下取回一部分资金，并相应地更新会计记录。然而，其实现方式存在严重缺陷：
+
+```347:356:sources/bribe.move
+let start_timestamp = minter::active_period() + WEEK;
+
+let last_reward = reward_per_epoch_internal(&bribe.reward_data, reward_token, start_timestamp);
+
+if (table::contains(&bribe.reward_data, reward_token)) {
+    let reward_token_timestamp = table::borrow_mut(&mut bribe.reward_data, reward_token);
+    let reward_data = table::borrow_mut(reward_token_timestamp, start_timestamp);
+    reward_data.rewards_per_epoch = last_reward - token_amount;
+    reward_data.last_update_time = timestamp::now_seconds();
+```
+- **L347 `let start_timestamp = minter::active_period() + WEEK;`**: 函数硬编码地选择**下一个** epoch 的时间戳作为操作目标。
+- **L349 `let last_reward = reward_per_epoch_internal(...)`**: 函数读取**下一个** epoch 的 `rewards_per_epoch` 作为基准值。
+- **L354 `reward_data.rewards_per_epoch = last_reward - token_amount;`**: 函数从**下一个** epoch 的待分配奖励中减去 `token_amount`。
+
+**漏洞核心**:
+该函数完全忽略了**当前** epoch 和**所有过去** epoch 中已经累积和承诺的奖励。一个恶意的（或操作失误的）`owner` 可以提取当前 epoch 或过去 epoch 已承诺的奖励资金，而会计调整却发生在未来的 epoch 上，导致会计记录与实际资金状况完全脱节。
+
+#### 2. `emergency_recover` (L383) - 无会计更新的直接提现 (更为严重)
+此函数的问题更为直接。它允许 `owner` 提取任意数量的代币，且**完全不进行任何会计状态的更新**。
+
+```move
+public entry fun emergency_recover(
+    owner: &signer,
+    pool: address,
+    reward_token: address,
+    token_amount: u64
+) acquires Bribe {
+    // ... (checks owner and balance) ...
+
+    // transfer token from resource account to owner
+    let bribe_signer = object::generate_signer_for_extending(&bribe.extended_ref);
+    primary_fungible_store::transfer(
+        &bribe_signer,
+        reward_asset,
+        bribe.owner,
+        token_amount
+    );
+    // ... (emits event) ...
+}
+```
+- **致命缺陷**: 在执行 `primary_fungible_store::transfer` (L402) 后，函数直接结束，没有对 `reward_data` 表进行任何修改。
+- **直接后果**: `owner` 可以随时将合约中所有贿赂代币提走，但协议的负债表（`reward_data`）却依然记录着对用户的奖励承诺。这使得合约进入**事实上的资不抵债状态**。
+
+### 证据 (P1-P3)
+-   **交易序列 (P1)** (使用 `emergency_recover`):
+    1.  `user_A` 调用 `bribe::notify_reward_amount(pool, DAI, 1,000,000)`。合约收到 1,000,000 DAI。
+    2.  `owner` 调用 `bribe::emergency_recover(owner_signer, pool, DAI, 1,000,000)`。`owner` 收到 1,000,000 DAI。
+    3.  `user_B` (一个有投票权的用户) 调用 `bribe::get_reward(user_B_signer, pool, [DAI])`。此交易将因断言 `ERROR_INSUFFICIENT_REWARD_TOKEN_BALANCE` 而 revert。
+
+-   **变量前后 (P2)** (使用 `emergency_recover`):
+    *   `bribe.reward_data[DAI][next_epoch].rewards_per_epoch`: `1,000,000` → `1,000,000` (未被修改)
+    *   `bribe_contract.balance_of(DAI)`: `1,000,000` → `0`
+    *   `owner.balance_of(DAI)`: `N` → `N + 1,000,000`
+
+-   **影响量化 (P3)**:
+    *   **损失金额**: `owner` 可以提取合约中任意已验证 `reward_token` 的**全部**余额，无论这些资金是否已承诺给投票者。损失金额等于合约中所有贿赂代币的总价值。
+    *   **受影响账户**: 所有向 `bribe` 合约提供奖励的人，以及所有参与投票以期望获得奖励的用户。
+
+### 利用草图
+这是一个由特权角色 `owner` 触发的漏洞，`emergency_recover` 函数的存在相当于为 `owner` 提供了一个可以随时无视协议规则、直接侵占用户应得奖励的后门。
+1.  `owner` 监控 `bribe` 合约，等待大额奖励存入。
+2.  在奖励存入后的任何时间点，`owner` 调用 `emergency_recover` 提取全部或大部分奖励资金。
+3.  协议的贿赂机制失效，投票者无法获得奖励，对协议的信任将完全崩溃。
+
+## 根因标签
+-   `Mis-measurement`
+-   `Access Control`
+-   `Invariant-Broken`
+
+## 状态
+Confirmed
